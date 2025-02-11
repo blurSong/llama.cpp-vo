@@ -2738,6 +2738,7 @@ void ggml_vk_instance_init() {
             GGML_ABORT("fatal error");
         }
 
+        // tsong. BUG here. We are not able to detect the iGPU if dGPUs are in the system.
         // Default to using all dedicated GPUs
         for (size_t i = 0; i < devices.size(); i++) {
             vk::PhysicalDeviceProperties2 new_props;
@@ -2747,6 +2748,10 @@ void ggml_vk_instance_init() {
             new_driver.pNext = &new_id;
             devices[i].getProperties2(&new_props);
 
+            // Also detect iGPU
+            if (new_props.properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu) {
+                vk_instance.device_indices.push_back(i);
+            }  
             if (new_props.properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu) {
                 // Check if there are two physical devices corresponding to the same GPU
                 auto old_device = std::find_if(

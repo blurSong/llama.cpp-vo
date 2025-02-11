@@ -902,6 +902,8 @@ struct test {
     int                      n_gen;
     std::string              test_time;
     std::vector<uint64_t>    samples_ns;
+    std::vector<uint64_t>    pp_samples_ns;
+    std::vector<uint64_t>    tg_samples_ns;
 
     test(const cmd_params_instance & inst, const llama_model * lmodel, const llama_context * ctx) {
         model_filename = inst.model;
@@ -940,6 +942,15 @@ struct test {
 
     uint64_t stdev_ns() const { return ::stdev(samples_ns); }
 
+    uint64_t pp_avg_ns() const { return ::avg(pp_samples_ns); }
+
+    uint64_t pp_stdev_ns() const { return ::stdev(pp_samples_ns); }
+
+    uint64_t tg_avg_ns() const { return ::avg(tg_samples_ns); }
+
+    uint64_t tg_stdev_ns() const { return ::stdev(tg_samples_ns); }
+
+
     std::vector<double> get_ts() const {
         int                 n_tokens = n_prompt + n_gen;
         std::vector<double> ts;
@@ -948,9 +959,35 @@ struct test {
         return ts;
     }
 
+    std::vector<double> get_pp_ts() const {
+        int n_tokens = n_prompt;
+        std::vector<double> ts;
+        std::transform(pp_samples_ns.begin(), pp_samples_ns.end(), std::back_inserter(ts), 
+                       [n_tokens](uint64_t t)
+                       { return 1e9 * n_tokens / t; });
+        return ts;
+    }
+
+    std::vector<double> get_tg_ts() const {
+        int n_tokens = n_gen;
+        std::vector<double> ts;
+        std::transform(tg_samples_ns.begin(), tg_samples_ns.end(), std::back_inserter(ts), 
+                       [n_tokens](uint64_t t)
+                       { return 1e9 * n_tokens / t; });
+        return ts;
+    }
+
     double avg_ts() const { return ::avg(get_ts()); }
 
     double stdev_ts() const { return ::stdev(get_ts()); }
+
+    double pp_avg_ts() const { return ::avg(get_pp_ts()); }
+
+    double pp_stdev_ts() const { return ::stdev(get_pp_ts()); }
+
+    double tg_avg_ts() const { return ::avg(get_tg_ts()); }
+
+    double tg_stdev_ts() const { return ::stdev(get_tg_ts()); }
 
     static std::string get_backend() {
         std::vector<std::string> backends;
@@ -966,12 +1003,13 @@ struct test {
 
     static const std::vector<std::string> & get_fields() {
         static const std::vector<std::string> fields = {
-            "build_commit", "build_number", "cpu_info",       "gpu_info",   "backends",     "model_filename",
-            "model_type",   "model_size",   "model_n_params", "n_batch",    "n_ubatch",     "n_threads",
-            "cpu_mask",     "cpu_strict",   "poll",           "type_k",     "type_v",       "n_gpu_layers",
-            "split_mode",   "main_gpu",     "no_kv_offload",  "flash_attn", "tensor_split", "use_mmap",
-            "embeddings",   "n_prompt",     "n_gen",          "test_time",  "avg_ns",       "stddev_ns",
-            "avg_ts",       "stddev_ts",
+            "build_commit", "build_number", "cpu_info",       "gpu_info",      "backends",      "model_filename",
+            "model_type",   "model_size",   "model_n_params", "n_batch",       "n_ubatch",      "n_threads",
+            "cpu_mask",     "cpu_strict",   "poll",           "type_k",        "type_v",        "n_gpu_layers",
+            "split_mode",   "main_gpu",     "no_kv_offload",  "flash_attn",    "tensor_split",  "use_mmap",
+            "embeddings",   "n_prompt",     "n_gen",          "test_time",     "avg_ns",        "stddev_ns",
+            "avg_ts",       "stddev_ts",    "pp_avg_ts",      "pp_stddev_ts",  "pp_avg_ns",     "pp_stddev_ns", 
+            "tg_avg_ts",    "tg_stddev_ts"  "tg_avg_ns",      "tg_stddev_ns",
         };
         return fields;
     }
@@ -982,14 +1020,15 @@ struct test {
         if (field == "build_number" || field == "n_batch" || field == "n_ubatch" || field == "n_threads" ||
             field == "poll" || field == "model_size" || field == "model_n_params" || field == "n_gpu_layers" ||
             field == "main_gpu" || field == "n_prompt" || field == "n_gen" || field == "avg_ns" ||
-            field == "stddev_ns") {
+            field == "stddev_ns" ||  field == "pp_avg_ns" || field == "pp_stddev_ns" || field == "tg_avg_ns" || field == "tg_stddev_ns") { 
             return INT;
         }
         if (field == "f16_kv" || field == "no_kv_offload" || field == "cpu_strict" || field == "flash_attn" ||
             field == "use_mmap" || field == "embeddings") {
             return BOOL;
         }
-        if (field == "avg_ts" || field == "stddev_ts") {
+        if (field == "avg_ts" || field == "stddev_ts" || field == "pp_avg_ts" || field == "pp_stddev_ts" || 
+            field == "tg_avg_ts" || field == "tg_stddev_ts") {
             return FLOAT;
         }
         return STRING;
@@ -1042,7 +1081,15 @@ struct test {
                                             std::to_string(avg_ns()),
                                             std::to_string(stdev_ns()),
                                             std::to_string(avg_ts()),
-                                            std::to_string(stdev_ts()) };
+                                            std::to_string(stdev_ts()),
+                                            std::to_string(pp_avg_ns()), 
+                                            std::to_string(pp_stdev_ns()),
+                                            std::to_string(pp_avg_ts()), 
+                                            std::to_string(pp_stdev_ts()),
+                                            std::to_string(tg_avg_ns()), 
+                                            std::to_string(tg_stdev_ns()),
+                                            std::to_string(tg_avg_ts()), 
+                                            std::to_string(tg_stdev_ts())};
         return values;
     }
 
@@ -1154,6 +1201,10 @@ struct json_printer : public printer {
         print_fields(test::get_fields(), t.get_values());
         fprintf(fout, "    \"samples_ns\": [ %s ],\n", join(t.samples_ns, ", ").c_str());
         fprintf(fout, "    \"samples_ts\": [ %s ]\n", join(t.get_ts(), ", ").c_str());
+        fprintf(fout, "    \"pp_samples_ns\": [ %s ],\n", join(t.pp_samples_ns, ", ").c_str());
+        fprintf(fout, "    \"pp_samples_ts\": [ %s ]\n", join(t.get_pp_ts(), ", ").c_str());
+        fprintf(fout, "    \"tg_samples_ns\": [ %s ],\n", join(t.tg_samples_ns, ", ").c_str());
+        fprintf(fout, "    \"tg_samples_ts\": [ %s ]\n", join(t.get_tg_ts(), ", ").c_str());
         fprintf(fout, "  }");
         fflush(fout);
     }
@@ -1174,6 +1225,10 @@ struct jsonl_printer : public printer {
         print_fields(test::get_fields(), t.get_values());
         fprintf(fout, "\"samples_ns\": [ %s ],", join(t.samples_ns, ", ").c_str());
         fprintf(fout, "\"samples_ts\": [ %s ]", join(t.get_ts(), ", ").c_str());
+        fprintf(fout, "\"pp_samples_ns\": [ %s ],\n", join(t.pp_samples_ns, ", ").c_str());
+        fprintf(fout, "\"pp_samples_ts\": [ %s ]\n", join(t.get_pp_ts(), ", ").c_str());
+        fprintf(fout, "\"tg_samples_ns\": [ %s ],\n", join(t.tg_samples_ns, ", ").c_str());
+        fprintf(fout, "\"tg_samples_ts\": [ %s ]\n", join(t.get_tg_ts(), ", ").c_str());
         fprintf(fout, "}\n");
         fflush(fout);
     }
@@ -1186,7 +1241,7 @@ struct markdown_printer : public printer {
         if (field == "model") {
             return -30;
         }
-        if (field == "t/s") {
+        if (field == "t/s" || field == "pp t/s" || field == "tg t/s") {
             return 20;
         }
         if (field == "size" || field == "params") {
@@ -1314,6 +1369,8 @@ struct markdown_printer : public printer {
         }
         fields.emplace_back("test");
         fields.emplace_back("t/s");
+        fields.emplace_back("pp t/s");
+        fields.emplace_back("tg t/s");
 
         fprintf(fout, "|");
         for (const auto & field : fields) {
@@ -1365,6 +1422,12 @@ struct markdown_printer : public printer {
             } else if (field == "t/s") {
                 snprintf(buf, sizeof(buf), "%.2f ± %.2f", t.avg_ts(), t.stdev_ts());
                 value = buf;
+            } else if (field == "pp t/s") {
+                snprintf(buf, sizeof(buf), "%.2f ± %.2f", t.pp_avg_ts(), t.pp_stdev_ts());
+                value = buf;
+            } else if (field == "tg t/s") {
+                snprintf(buf, sizeof(buf), "%.2f ± %.2f", t.tg_avg_ts(), t.tg_stdev_ts());
+                value = buf;
             } else if (vmap.find(field) != vmap.end()) {
                 value = vmap.at(field);
             } else {
@@ -1373,7 +1436,7 @@ struct markdown_printer : public printer {
             }
 
             int width = get_field_width(field);
-            if (field == "t/s") {
+            if (field == "t/s" || field == "pp t/s" || field == "tg t/s") {
                 // HACK: the utf-8 character is 2 bytes
                 width += 1;
             }
@@ -1619,7 +1682,7 @@ int main(int argc, char ** argv) {
         for (int i = 0; i < params.reps; i++) {
             llama_kv_cache_clear(ctx);
 
-            uint64_t t_start = get_time_ns();
+            uint64_t pp_start = get_time_ns();
 
             if (t.n_prompt > 0) {
                 if (params.progress) {
@@ -1628,6 +1691,10 @@ int main(int argc, char ** argv) {
                 }
                 test_prompt(ctx, t.n_prompt, t.n_batch, t.n_threads);
             }
+
+            uint64_t t_pp_ns = get_time_ns() - pp_start;
+            uint64_t tg_start = get_time_ns();
+
             if (t.n_gen > 0) {
                 if (params.progress) {
                     fprintf(stderr, "llama-bench: benchmark %d/%zu: generation run %d/%d\n", params_idx, params_count,
@@ -1636,8 +1703,12 @@ int main(int argc, char ** argv) {
                 test_gen(ctx, t.n_gen, t.n_threads);
             }
 
-            uint64_t t_ns = get_time_ns() - t_start;
-            t.samples_ns.push_back(t_ns);
+            uint64_t t_tg_ns = get_time_ns() - tg_start;
+            uint64_t t_e2e_ns = t_pp_ns + t_tg_ns;
+
+            t.samples_ns.push_back(t_e2e_ns);
+            t.pp_samples_ns.push_back(t_pp_ns);
+            t.tg_samples_ns.push_back(t_tg_ns);
         }
 
         if (p) {
