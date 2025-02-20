@@ -90,7 +90,7 @@ zig-cache/
 ppl-*.txt
 qnt-*.txt
 perf-*.txt
-
+vulkan-exams/logs/*
 # Examples
 
 examples/jeopardy/results.txt

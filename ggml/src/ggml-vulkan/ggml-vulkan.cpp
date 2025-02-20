@@ -644,7 +644,7 @@ private:
 class vk_perf_logger {
 public:
     void print_timings() {
-        std::cerr << "----------------\nVulkan Timings:" << std::endl;
+        std::cerr << "Vulkan Timings:"<< std::endl <<"----------------" << std::endl;
         for (const auto& t : timings) {
             double total = 0;
             for (const auto& time : t.second) {
@@ -652,7 +652,7 @@ public:
             }
             std::cerr << t.first << ": " << t.second.size() << " x " << (total / t.second.size() / 1000.0) << " ms" << std::endl;
         }
-        std::cerr << "----------------\nVulkan Timings Endline." << std::endl;
+        std::cerr << "----------------" << std::endl;
 
         timings.clear();
     }
