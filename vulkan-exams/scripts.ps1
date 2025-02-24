@@ -1,21 +1,29 @@
 
 # Use modified llama-bench.cpp
+# To setup device 1 for igpu
+$Env:GGML_VK_VISIBLE_DEVICES="1"
+
 # Benchmark
 cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_PERF=OFF
 cmake --build build --config Release
 
-LOG_DIR="D:\SRCs\llama.cpp\vulkan-exams\logs"
+$LOG_DIR="C:\SRC\llama.cpp\vulkan-exams\logs"
+$MODEL_DIR="C:\SRC\llmodel\Meta-Llama-3.1-8B-Instruct.Q4_K_M.gguf"
 
 Set-Location .\build\bin
-.\llama-bench -p 0 -n 0 -r 10 -pg 128,128 -pg 128,2048 -pg 2048,128 -pg 2048,2048 -mg 0 -m C:\SRC\llmodel\Meta-Llama-3.1-8B-Instruct.Q4_K_M.gguf *> $LOG_DIR\vulkan-perf_01.log
+.\llama-bench -p 0 -n 0 -r 10 -pg 128,128 -pg 128,2048 -pg 2048,128 -pg 2048,2048 -m $MODEL_DIR *> $LOG_DIR\vulkan-perf_01.log
+
+.\llama-bench -p 512 -n 0 -r 1 --progress --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_debug_p512.log
 
 # Profile
 cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_PERF=ON
 cmake --build build --config Release
 Set-Location .\build\bin
-.\llama-bench -p 128 -n 0 -r 20 -mg 0 --progress --skip-warmup -m C:\SRC\llmodel\Meta-Llama-3.1-8B-Instruct.Q4_K_M.gguf *> $LOG_DIR\vulkan-perf_p128_n0_01.log
-.\llama-bench -p 0 -n 128 -r 1 -mg 0 --progress --skip-warmup -m C:\SRC\llmodel\Meta-Llama-3.1-8B-Instruct.Q4_K_M.gguf *> $LOG_DIR\vulkan-perf_p0_n128_01.log
-.\llama-bench -p 1024 -ub 1024 -n 0 -r 1 -mg 0 --progress --skip-warmup -m C:\SRC\llmodel\Meta-Llama-3.1-8B-Instruct.Q4_K_M.gguf *> $LOG_DIR\vulkan-perf_p128_n0_01.log
+.\llama-bench -p 128 -n 0 -r 21 --progress --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_perf_p128_n0_01.log
+.\llama-bench -p 0 -n 128 -r 21 --progress --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_perf_p0_n128_03.log
+.\llama-bench -p 1024 -ub 1024 -n 0 -r 21 --progress --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_perf_p1024_n0_03.log
 
 # Parse timings
-python parse_timings.py logs\vulkan_perf_p128_n0_01.log
+python parse_timings.py $LOG_DIR\vulkan_perf_p128_n0_03.log short
+
+# Do note that the logged ops only contains op+shape informations. Needs to denote the layer name maunally.

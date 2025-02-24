@@ -650,7 +650,7 @@ public:
             for (const auto& time : t.second) {
                 total += time;
             }
-            std::cerr << t.first << ": " << t.second.size() << " x " << (total / t.second.size() / 1000.0) << " ms" << std::endl;
+            std::cerr << t.first << ": " << t.second.size() << " x " << (total / t.second.size()) << " ms" << std::endl;
         }
         std::cerr << "----------------" << std::endl;
 
@@ -8213,7 +8213,9 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
     // Submit work every nodes_per_submit nodes to overlap CPU cmdbuffer generation with GPU execution.
     // Start with a smaller count to get work submitted right away, and increase it after each submit.
     // tsong. Hack these hardcoding for performance benchmarking
-    int nodes_per_submit = 20;
+    // defualt 20, 50, 100,...
+    int nps[3] = {20, 50, 100};
+    int nodes_per_submit = nps[0];
     int submitted_nodes = 0;
     int submit_count = 0;
     for (int i = 0; i < cgraph->n_nodes; i++) {
@@ -8241,10 +8243,10 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
             submitted_nodes = 0;
             switch (submit_count) {
             case 0:
-                nodes_per_submit = 50;
+                nodes_per_submit = nps[1];
                 break;
             default:
-                nodes_per_submit = 100;
+                nodes_per_submit = nps[2];
                 break;
             }
             submit_count++;
@@ -8252,6 +8254,7 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
     }
 
 #ifdef GGML_VULKAN_PERF
+    std::cerr << "submit counts "<< submit_count<<std::endl;
     ctx->device->perf_logger->print_timings();
 #endif
 
