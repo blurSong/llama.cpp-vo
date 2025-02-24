@@ -6676,6 +6676,11 @@ static void ggml_vk_test_matmul(ggml_backend_vk_context * ctx, size_t m, size_t 
         }
     }
 
+    // tsong. DEBUG. Need to load shaders before allocating descriptor sets
+    if (ctx->device->need_compiles) {
+        ggml_vk_load_shaders(ctx->device);
+    }
+
     ggml_pipeline_allocate_descriptor_sets(ctx->device);
 
     vk_buffer d_X = ggml_vk_create_buffer_check(ctx->device, sizeof(X_TYPE) * x_ne, vk::MemoryPropertyFlagBits::eDeviceLocal);
@@ -7058,6 +7063,11 @@ static void ggml_vk_test_dequant_matmul(ggml_backend_vk_context * ctx, size_t m,
         }
     }
 
+    // tsong. DEBUG. Need to load shaders before allocating descriptor sets
+    if (ctx->device->need_compiles) {
+        ggml_vk_load_shaders(ctx->device);
+    }
+
     ggml_pipeline_allocate_descriptor_sets(ctx->device);
 
     ggml_vk_buffer_write(qx_buf, 0, qx, qx_sz);
@@ -7174,7 +7184,19 @@ static void ggml_vk_test_dequant_matmul(ggml_backend_vk_context * ctx, size_t m,
 static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
 #if defined(GGML_VULKAN_RUN_TESTS)
     const std::vector<size_t> vals {
-        512, 512, 128,
+        4096, 128, 4096,
+        4096, 512, 4096,
+        4096, 1024, 4096,
+        4096, 2048, 4096,
+        14336, 128, 4096,
+        14336, 512, 4096,
+        14336, 1024, 4096,
+        14336, 2048, 4096,
+        4096, 128, 14336,
+        4096, 512, 14336,
+        4096, 1024, 14336,
+        4096, 2048, 14336,
+        /* 512, 512, 128,
         128, 512, 512,
         4096, 512, 4096,
         11008, 512, 4096,
@@ -7192,24 +7214,27 @@ static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
         49, 49, 128,
         128, 49, 49,
         4096, 49, 4096,
+        mnk, only test the cases we want to benchmark 
+        tsong. Do note that z=xy^t. x=[m,k] is weight and y=[n,k] is input*/
     };
     const size_t num_it = 100;
 
     for (size_t i = 0; i < vals.size(); i += 3) {
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 1, 0);
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 1, 1);
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 1, 2);
+        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 1, 0);
+        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 1, 1);
+        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 1, 2);
+        /*std::cerr << '\n';
+        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 2, 0);
+        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 2, 1);
+        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 2, 2);
         std::cerr << '\n';
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 2, 0);
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 2, 1);
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 2, 2);
-        std::cerr << '\n';
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 4, 0);
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 4, 1);
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 4, 2);
-        std::cerr << '\n' << std::endl;
+        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 4, 0);
+        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 4, 1);
+        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 4, 2);
+        */
+        std::cerr << std::endl;
 
-        if (vals[i + 2] % 32 == 0) {
+        /*if (vals[i + 2] % 32 == 0) {
             ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 1, 0, GGML_TYPE_Q4_0);
             ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 1, 1, GGML_TYPE_Q4_0);
             ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 1, 2, GGML_TYPE_Q4_0);
@@ -7223,12 +7248,12 @@ static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
             ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 4, 2, GGML_TYPE_Q4_0);
             std::cerr << '\n' << std::endl;
         }
-
+        */
         if (vals[i + 2] % 256 == 0) {
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 1, 0, GGML_TYPE_Q4_K);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 1, 1, GGML_TYPE_Q4_K);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 1, 2, GGML_TYPE_Q4_K);
-            std::cerr << '\n';
+            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 1, 0, GGML_TYPE_Q4_K);
+            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 1, 1, GGML_TYPE_Q4_K);
+            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 1, 2, GGML_TYPE_Q4_K);
+            /*std::cerr << '\n';
             ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 2, 0, GGML_TYPE_Q4_K);
             ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 2, 1, GGML_TYPE_Q4_K);
             ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 2, 2, GGML_TYPE_Q4_K);
@@ -7236,6 +7261,7 @@ static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
             ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 4, 0, GGML_TYPE_Q4_K);
             ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 4, 1, GGML_TYPE_Q4_K);
             ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 4, 2, GGML_TYPE_Q4_K);
+            */
             std::cerr << '\n' << std::endl;
         }
     }
@@ -8187,6 +8213,10 @@ static bool ggml_vk_is_empty(ggml_tensor * node) {
 static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph) {
     VK_LOG_DEBUG("ggml_backend_vk_graph_compute(" << cgraph->n_nodes << " nodes)");
     ggml_backend_vk_context * ctx = (ggml_backend_vk_context *)backend->context;
+
+#ifdef GGML_VULKAN_RUN_TESTS
+    ggml_vk_preallocate_buffers(ctx);
+#endif
 
     for (int i = 0; i < cgraph->n_nodes; i++) {
         ggml_vk_build_graph(ctx, cgraph->nodes[i], i, nullptr, 0, true, false, false);
