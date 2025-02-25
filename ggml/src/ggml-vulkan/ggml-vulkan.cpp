@@ -7184,7 +7184,14 @@ static void ggml_vk_test_dequant_matmul(ggml_backend_vk_context * ctx, size_t m,
 static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
 #if defined(GGML_VULKAN_RUN_TESTS)
     const std::vector<size_t> vals {
-        4096, 128, 4096,
+        14336, 4096, 4096,
+        14336, 8196, 4096,
+        14336, 16384, 4096,
+        4096, 4096, 14336,
+        4096, 8196, 14336,
+        4096, 16384, 14336,
+    };
+    /* 4096, 128, 4096,
         4096, 512, 4096,
         4096, 1024, 4096,
         4096, 2048, 4096,
@@ -7195,78 +7202,35 @@ static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
         4096, 128, 14336,
         4096, 512, 14336,
         4096, 1024, 14336,
-        4096, 2048, 14336,
-        /* 512, 512, 128,
-        128, 512, 512,
-        4096, 512, 4096,
-        11008, 512, 4096,
-        4096, 512, 11008,
-        32000, 512, 4096,
-        8, 8, 8,
-        100, 46, 576,
-        623, 111, 128,
-        100, 46, 558,
-        512, 1, 256,
-        128, 110, 622,
-        511, 511, 127,
-        511, 511, 7,
-        511, 511, 17,
-        49, 49, 128,
-        128, 49, 49,
-        4096, 49, 4096,
-        mnk, only test the cases we want to benchmark 
-        tsong. Do note that z=xy^t. x=[m,k] is weight and y=[n,k] is input*/
+        4096, 2048, 14336
+    */
+    const std::vector<size_t> vals2 {
+        256, 256, 256,
+        512, 512, 512,
+        1024, 1024, 1024,
+        2048, 2048, 2048,
+        3072, 3072, 3072,
+        4096, 4096, 4096,
+        5120, 5120, 5120,
+        6144, 6144, 6144,
+        7168, 7168, 7168,
+        8192, 8192, 8192,
+        16384, 16384, 16384,
     };
+    // mnk, only test the cases we want to benchmark
+    // tsong. Do note that z=xy^t. x=(m,k) is weight and y=(n,k) is input.
+
     const size_t num_it = 100;
+    const size_t batch = 1;
 
     for (size_t i = 0; i < vals.size(); i += 3) {
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 1, 0);
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 1, 1);
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 1, 2);
-        /*std::cerr << '\n';
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 2, 0);
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 2, 1);
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 2, 2);
-        std::cerr << '\n';
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 4, 0);
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 4, 1);
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 4, 2);
-        */
+        // shader_size = 0, 1, 2 for S, M, L
+        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], batch, num_it, 1, 1);
+        ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], batch, num_it, 1, 1, GGML_TYPE_Q4_K);
         std::cerr << std::endl;
-
-        /*if (vals[i + 2] % 32 == 0) {
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 1, 0, GGML_TYPE_Q4_0);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 1, 1, GGML_TYPE_Q4_0);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 1, 2, GGML_TYPE_Q4_0);
-            std::cerr << '\n';
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 2, 0, GGML_TYPE_Q4_0);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 2, 1, GGML_TYPE_Q4_0);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 2, 2, GGML_TYPE_Q4_0);
-            std::cerr << '\n';
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 4, 0, GGML_TYPE_Q4_0);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 4, 1, GGML_TYPE_Q4_0);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 4, 2, GGML_TYPE_Q4_0);
-            std::cerr << '\n' << std::endl;
-        }
-        */
-        if (vals[i + 2] % 256 == 0) {
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 1, 0, GGML_TYPE_Q4_K);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 1, 1, GGML_TYPE_Q4_K);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 1, num_it, 1, 2, GGML_TYPE_Q4_K);
-            /*std::cerr << '\n';
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 2, 0, GGML_TYPE_Q4_K);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 2, 1, GGML_TYPE_Q4_K);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 2, 2, GGML_TYPE_Q4_K);
-            std::cerr << '\n';
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 4, 0, GGML_TYPE_Q4_K);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 4, 1, GGML_TYPE_Q4_K);
-            ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], 2, num_it, 4, 2, GGML_TYPE_Q4_K);
-            */
-            std::cerr << '\n' << std::endl;
-        }
     }
 
-    GGML_ABORT("fatal error");
+    GGML_ABORT("End running test. Exit.");
 #endif
 
     if (ctx->prealloc_x == nullptr || (ctx->prealloc_size_x > 0 && ctx->prealloc_x->size < ctx->prealloc_size_x)) {
@@ -7745,7 +7709,7 @@ static bool ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_tensor *
         }
 
 #ifdef GGML_VULKAN_PERF
-        // tsong. add device. node and node idx for profling
+        // tsong. add device, node and node idx for profling
         use_fence = true; // fence anyway to get time
 
         auto begin = std::chrono::high_resolution_clock::now();
@@ -8242,9 +8206,9 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
 
     // Submit work every nodes_per_submit nodes to overlap CPU cmdbuffer generation with GPU execution.
     // Start with a smaller count to get work submitted right away, and increase it after each submit.
-    // tsong. Hack these hardcoding for performance benchmarking
-    // defualt 20, 50, 100,...
-    int nps[3] = {20, 50, 100};
+    // tsong. Hack this hardcoding for performance benchmarking
+    // defualt 20, 50, 100, 0,0,0 for per-node sumbission profling test.
+    int nps[3] = {0, 0, 0};
     int nodes_per_submit = nps[0];
     int submitted_nodes = 0;
     int submit_count = 0;
@@ -8284,7 +8248,7 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
     }
 
 #ifdef GGML_VULKAN_PERF
-    std::cerr << "submit counts "<< submit_count<<std::endl;
+    std::cerr << "submit counts " << submit_count << std::endl;
     ctx->device->perf_logger->print_timings();
 #endif
 
