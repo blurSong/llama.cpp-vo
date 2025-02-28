@@ -7183,27 +7183,12 @@ static void ggml_vk_test_dequant_matmul(ggml_backend_vk_context * ctx, size_t m,
 
 static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
 #if defined(GGML_VULKAN_RUN_TESTS)
-    const std::vector<size_t> vals {
-        14336, 4096, 4096,
-        14336, 8196, 4096,
-        14336, 16384, 4096,
-        4096, 4096, 14336,
-        4096, 8196, 14336,
-        4096, 16384, 14336,
-    };
-    /* 4096, 128, 4096,
-        4096, 512, 4096,
-        4096, 1024, 4096,
-        4096, 2048, 4096,
-        14336, 128, 4096,
-        14336, 512, 4096,
-        14336, 1024, 4096,
-        14336, 2048, 4096,
-        4096, 128, 14336,
-        4096, 512, 14336,
-        4096, 1024, 14336,
-        4096, 2048, 14336
-    */
+    std::vector<size_t> vals(3*32);
+    for(int i = 0; i < 32; i++) {
+        vals[i*3] = 2048+i*256;
+        vals[i*3+1] = 128;
+        vals[i*3+2] = 4096;
+    }
     const std::vector<size_t> vals2 {
         256, 256, 256,
         512, 512, 512,
@@ -7220,12 +7205,13 @@ static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
     // mnk, only test the cases we want to benchmark
     // tsong. Do note that z=xy^t. x=(m,k) is weight and y=(n,k) is input.
 
-    const size_t num_it = 100;
+    const size_t num_it = 72;
     const size_t batch = 1;
 
     for (size_t i = 0; i < vals.size(); i += 3) {
         // shader_size = 0, 1, 2 for S, M, L
-        ggml_vk_test_matmul<ggml_fp16_t, float>(ctx, vals[i], vals[i + 1], vals[i + 2], batch, num_it, 1, 1);
+        // Set X_TYPE Y_TYPE to ggml_fp16_t for hmma test.
+        // ggml_vk_test_matmul<ggml_fp16_t, ggml_fp16_t>(ctx, vals[i], vals[i + 1], vals[i + 2], batch, num_it, 1, 1);
         ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], batch, num_it, 1, 1, GGML_TYPE_Q4_K);
         std::cerr << std::endl;
     }

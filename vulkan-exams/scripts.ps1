@@ -21,10 +21,9 @@ cmake --build build --config Release
 # Do not needs debug option
 # Modify ggml-vulkan.cpp(7816): const std::vector<size_t> vals for GEMM benchmark
 # Do note that z=xy^t. x=(m,k) is weight and y=(n,k) is input.
-# Dequant matmul required m/k > 256 block size.
 cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_RUN_TESTS=ON
 cmake --build build --config Release
-.\llama-bench -p 100 -n 0 -r 1 --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_gemm_01.log
+.\llama-bench -p 100 -n 0 -r 1 --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_gemm_test_01.log
 
 # 4. Profile
 cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_PERF=ON
