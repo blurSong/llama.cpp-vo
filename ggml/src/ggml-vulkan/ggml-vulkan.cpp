@@ -795,9 +795,15 @@ static std::condition_variable compile_count_cond;
 static void ggml_vk_create_pipeline_func(vk_device& device, vk_pipeline& pipeline, size_t spv_size, const void* spv_data, const std::string entrypoint,
                                          uint32_t parameter_count, std::array<uint32_t, 3> wg_denoms, std::vector<uint32_t> specialization_constants,
                                          bool disable_robustness, bool require_full_subgroups, uint32_t required_subgroup_size) {
-    VK_LOG_DEBUG("ggml_vk_create_pipeline(" << device->name << ", " << pipeline->name << ", " << entrypoint << ", " << parameter_count <<
-                 ", (" << wg_denoms[0] << "," << wg_denoms[1] << "," << wg_denoms[2] << "), specialization_constants, " <<
-                 disable_robustness << ", " << require_full_subgroups << ", " << required_subgroup_size << ")");
+#ifdef GGML_VULKAN_DEBUG
+    // tsong. To dump the specialization_constants needs to directly use std::cerr.
+    std::cerr<< "ggml_vk_create_pipeline(" << device->name << ", " << pipeline->name << ", " << entrypoint << ", " << parameter_count <<
+                 ", wg_denoms: (" << wg_denoms[0] << "," << wg_denoms[1] << "," << wg_denoms[2] << "), specialization_constants: (";
+    for (size_t i = 0; i < specialization_constants.size(); i++) {
+        std::cerr << specialization_constants[i] << ", ";
+    }
+    std::cerr << "), " << disable_robustness << ", " << require_full_subgroups << ", " << required_subgroup_size << ")" << std::endl;
+#endif
     GGML_ASSERT(parameter_count > 0);
     GGML_ASSERT(wg_denoms[0] > 0 && wg_denoms[1] > 0 && wg_denoms[2] > 0); // NOLINT
 
@@ -1517,8 +1523,24 @@ static void ggml_vk_load_shaders(vk_device& device) {
         m_warptile = { 128,  64,  64, 16, subgroup_size_8, 32, 2, tm_m, tn_m, tk_m, subgroup_size_8 };
         s_warptile = { subgroup_size_16, 32, 32, 16, 32, 32, 2, tm_s, tn_s, tk_s, subgroup_size_8 };
 
+        // tsong. Modify runtime constants for perf tune
+        // subgroup_size_8 denotes the 64 SIMD lane in AMD
+        const uint32_t subgroup_size_mmq = 64;
+
         l_warptile_mmq = { 128, 128, 128, 32, subgroup_size_8 * 2, 64, 2, tm_l, tn_l, tk_l, subgroup_size_8 };
-        m_warptile_mmq = { 128,  64,  64, 32, subgroup_size_8, 32, 2, tm_m, tn_m, tk_m, subgroup_size_8 };
+
+        // original
+        // m_warptile_mmq = { 128,  64,  64, 32, subgroup_size_8, 32, 2, tm_m, tn_m, tk_m, subgroup_size_8 };
+
+        // 64 K
+        m_warptile_mmq = { 128,  64,  64, 64, subgroup_size_8, 32, 2, tm_m, tn_m, tk_m, subgroup_size_8 };
+
+        // CTA = 256 test 1. WN=16 --> WNITER=1
+        // m_warptile_mmq = { 256, 64, 64, 32, subgroup_size_mmq, 16, 2, tm_m, tn_m, tk_m, subgroup_size_mmq };
+
+        // CTA = 256 test 2. WN=16, TM=2 --> WNITER=2
+        // m_warptile_mmq = { 256, 64, 64, 32, subgroup_size_mmq, 16, 2, 2, tn_m, tk_m, subgroup_size_mmq };
+
         s_warptile_mmq = { subgroup_size_32, 32, 32, 32, 32, 32, 2, tm_s, tn_s, tk_s, subgroup_size_8 };
 
         l_mmq_wg_denoms = l_wg_denoms = {128, 128, 1 };
@@ -7230,38 +7252,58 @@ static void ggml_vk_test_dequant_matmul(ggml_backend_vk_context * ctx, size_t m,
 
 static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
 #if defined(GGML_VULKAN_RUN_TESTS)
-    std::vector<size_t> vals(3*32);
-    for(int i = 0; i < 32; i++) {
-        vals[i*3] = 2048+i*256;
-        vals[i*3+1] = 128;
-        vals[i*3+2] = 4096;
-    }
-    const std::vector<size_t> vals2 {
-        256, 256, 256,
-        512, 512, 512,
+    const std::vector<size_t> vals0 {
+        1024, 1024, 256,
+        1024, 1024, 512,
+        1024, 1024, 768,
         1024, 1024, 1024,
-        2048, 2048, 2048,
-        3072, 3072, 3072,
-        4096, 4096, 4096,
-        5120, 5120, 5120,
-        6144, 6144, 6144,
-        7168, 7168, 7168,
-        8192, 8192, 8192,
-        16384, 16384, 16384,
+        4096, 3072, 1280,
+        4096, 4096, 1536,
+        4096, 6144, 1792,
+        4096, 8192, 2048,
+        4096, 10240, 2304,
+        4096, 12288, 14336,
+        4096, 14336, 14336,
+        4096, 16384, 14336,
+        14336, 128, 4096,
+        14336, 512, 4096,
+        14336, 1024, 4096,
+        14336, 2048, 4096,
+        14336, 3072, 4096,
+        14336, 4096, 4096,
+        14336, 6144, 4096,
+        14336, 8192, 4096,
+        14336, 10240, 4096,
+        14336, 12288, 4096,
+        14336, 14336, 4096,
+        14336, 16384, 4096,
     };
     // mnk, only test the cases we want to benchmark
     // tsong. Do note that z=xy^t. x=(m,k) is weight and y=(n,k) is input.
 
     const size_t num_it = 72;
     const size_t batch = 1;
+    const int split_k = 1;
+    const int shader_size = 1;
+    // shader_size = 0, 1, 2 for S, M, L
+    std::vector<size_t> vals(3*20);
+
+    for(size_t mn = 2048; mn <= 8192; mn *= 2) {
+
+    for(int k = 0; k < 20; k++) {
+        vals[k*3] = mn;
+        vals[k*3+1] = mn;
+        vals[k*3+2] = (k+1)*512;
+    }
 
     for (size_t i = 0; i < vals.size(); i += 3) {
-        // shader_size = 0, 1, 2 for S, M, L
         // Set X_TYPE Y_TYPE to ggml_fp16_t for hmma test.
-        // ggml_vk_test_matmul<ggml_fp16_t, ggml_fp16_t>(ctx, vals[i], vals[i + 1], vals[i + 2], batch, num_it, 1, 1);
-        ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], batch, num_it, 1, 1, GGML_TYPE_Q4_K);
+        // ggml_vk_test_matmul<ggml_fp16_t, ggml_fp16_t>(ctx, vals[i], vals[i + 1], vals[i + 2], batch, num_it, split_k, shader_size);
+        // Set GGML_TYPE_Q4_K for q4k test.
+        ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], batch, num_it, split_k, shader_size, GGML_TYPE_Q4_K);
         std::cerr << std::endl;
     }
+}
 
     GGML_ABORT("End running test. Exit.");
 #endif
@@ -8272,7 +8314,7 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
     // Start with a smaller count to get work submitted right away, and increase it after each submit.
     // tsong. Hack this hardcoding for performance benchmarking
     // defualt 20, 50, 100, 0,0,0 for per-node sumbission profling test.
-    int nps[3] = {0, 0, 0};
+    int nps[3] = {20, 50, 100};
     int nodes_per_submit = nps[0];
     int submitted_nodes = 0;
     int submit_count = 0;

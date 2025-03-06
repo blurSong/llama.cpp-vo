@@ -10,12 +10,13 @@ Set-Location .\llama.cpp\build\bin
 # 1. E2E Benchmark
 cmake -B build -DGGML_VULKAN=ON
 cmake --build build --config Release
-.\llama-bench -p 0 -n 0 -r 10 -pg 128,128 -pg 128,2048 -pg 2048,128 -pg 2048,2048 -m $MODEL_DIR *> $LOG_DIR\vulkan_e2e_perf_01.log
+.\llama-bench -p 0 -n 0 -r 10 -pg 128,128 -pg 128,2048 -pg 2048,128 -pg 2048,2048 -m $MODEL_DIR *>> $LOG_DIR\vulkan_e2e_perf_01.log
 
 # 2. Get the vulkan debug log
 cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_DEBUG=ON
 cmake --build build --config Release
 .\llama-bench -p 512 -n 0 -r 1 --progress --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_debug_p512_n0_01.log
+.\llama-bench -p 100 -n 1 -r 1 --progress --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_debug_p100_n1_01.log
 
 # 3. GEMM Benchmark
 # Do not needs debug option
@@ -23,7 +24,7 @@ cmake --build build --config Release
 # Do note that z=xy^t. x=(m,k) is weight and y=(n,k) is input.
 cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_RUN_TESTS=ON
 cmake --build build --config Release
-.\llama-bench -p 100 -n 0 -r 1 --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_gemm_test_01.log
+.\llama-bench -p 100 -n 0 -r 1 --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_gemm_test_fixmn_shmook.log
 
 # 4. Profile
 cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_PERF=ON
@@ -39,7 +40,7 @@ cmake --build build --config Debug
 # edit lauch.json for debugging.
 
 # 0. Parse timings
-python parse_log.py $LOG_DIR\vulkan_perf_p128_n0_03.log
+python ..\..\vulkan-exams\parse_log.py $LOG_DIR\vulkan_gemm_test_cta256.log
 python parse_log.py $LOG_DIR\vulkan_gemm_01.log
 
 
