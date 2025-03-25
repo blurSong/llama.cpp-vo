@@ -21,10 +21,10 @@ cmake --build build --config Release
 # 3. GEMM Benchmark
 # Do not needs debug option
 # Modify ggml-vulkan.cpp(7816): const std::vector<size_t> vals for GEMM benchmark
-# Do note that z=xy^t. x=(m,k) is weight and y=(n,k) is input.
+# Do note that z=xy^t. x=(m,k) is weight and y=(n,k) is input
 cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_RUN_TESTS=ON
 cmake --build build --config Release
-.\llama-bench -p 100 -n 0 -r 1 --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_gemm_test_fixmn_shmook.log
+.\llama-bench -p 100 -n 0 -r 1 --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_gemm_purecomp_f16v2war_unrollall.log
 
 # 4. Profile
 cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_PERF=ON
@@ -45,3 +45,26 @@ python parse_log.py $LOG_DIR\vulkan_gemm_01.log
 
 
 # Do note that the logged ops only contains op+shape informations. Needs to denote the layer name maunally.
+
+# ASM Analysis
+$SHADER_INCLUDE_PATH="C:\SRC\llama.cpp\ggml\src\ggml-vulkan\vulkan-shaders"
+$MM_SHADER_DEFINES="-DFLOAT16 -DDATA_A_Q4_K -DLOAD_VEC_A=2 -DLOAD_VEC_B=8 -DB_TYPE=mat2x4 -DFLOAT_TYPE=float16_t -DD_TYPE=float -DACC_TYPE=float16_t"
+$INPUT_COMP="C:\SRC\llama.cpp\ggml\src\ggml-vulkan\vulkan-shaders\mul_mm.comp"
+$OUTSPV="matmul_q4_k_f32_f16acc_aligned_m"
+
+# glslangValidator
+glslangValidator -V -DF16VEC2_WAR -DFLOAT16 -DDATA_A_Q4_K -DLOAD_VEC_A=2 -DLOAD_VEC_B=8 -DB_TYPE=mat2x4 -DFLOAT_TYPE=float16_t -DD_TYPE=float -DACC_TYPE=f16vec2 -IC:\SRC\llama.cpp\ggml\src\ggml-vulkan\vulkan-shaders mul_mm.comp -o matmul_q4_k_f32_f16acc_aligned_m_f16vec2war.spv
+spirv-dis matmul_q4_k_f32_f16acc_aligned_m_f16vec2war.spv -o matmul_q4_k_f32_f16acc_aligned_m_f16vec2war.asm
+
+# RGA
+# C:\SRC\RadeonDeveloperToolSuite-2025-03-07-1606\rga.exe
+./rga.exe -s vulkan -h
+./rga.exe -s vulkan -c gfx1150 ${MM_SHADER_DEFINES} -I ${SHADER_INCLUDE_PATH} --comp ${INPUT_COMP}
+# Use RGA Layer for .cpso file
+$Env:RGA_LAYER_OUTPUT_PATH="C:\SRC\Radeon\RGA\Layer"
+$Env:ENABLE_RGA_PIPELINE_EXTRACTION_LAYER="1"
+$Env:RGA_LAYER_LOG_ENABLE="1" # Enable logging for debugging
+# Run your Vulkan® application with the above environment variables set.
+# The layer will generate the output files in RGA_LAYER_OUTPUT_PATH.
+
+# FLOAT16;DATA_A_Q4_K;LOAD_VEC_A=2;LOAD_VEC_B=8;B_TYPE=mat2x4;FLOAT_TYPE=float16_t;D_TYPE=float;ACC_TYPE=float16_t;F16VEC2_WAR2

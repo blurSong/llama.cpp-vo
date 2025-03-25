@@ -1530,10 +1530,10 @@ static void ggml_vk_load_shaders(vk_device& device) {
         l_warptile_mmq = { 128, 128, 128, 32, subgroup_size_8 * 2, 64, 2, tm_l, tn_l, tk_l, subgroup_size_8 };
 
         // original
-        // m_warptile_mmq = { 128,  64,  64, 32, subgroup_size_8, 32, 2, tm_m, tn_m, tk_m, subgroup_size_8 };
+        m_warptile_mmq = { 128,  64,  64, 32, subgroup_size_8, 32, 2, tm_m, tn_m, tk_m, subgroup_size_8 };
 
         // 64 K
-        m_warptile_mmq = { 128,  64,  64, 64, subgroup_size_8, 32, 2, tm_m, tn_m, tk_m, subgroup_size_8 };
+        // m_warptile_mmq = { 128, 64, 64, 64, subgroup_size_8, 32, 2, tm_m, tn_m, tk_m, subgroup_size_8 };
 
         // CTA = 256 test 1. WN=16 --> WNITER=1
         // m_warptile_mmq = { 256, 64, 64, 32, subgroup_size_mmq, 16, 2, tm_m, tn_m, tk_m, subgroup_size_mmq };
@@ -7252,24 +7252,13 @@ static void ggml_vk_test_dequant_matmul(ggml_backend_vk_context * ctx, size_t m,
 
 static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
 #if defined(GGML_VULKAN_RUN_TESTS)
+// tsong. Update 03/13. When using RDP to collect traces the case number must be limited due to the sqtt buffer size is huge.
+// m/n/k tile = 64/64/32 cu=16
     const std::vector<size_t> vals0 {
-        1024, 1024, 256,
-        1024, 1024, 512,
-        1024, 1024, 768,
-        1024, 1024, 1024,
-        4096, 3072, 1280,
-        4096, 4096, 1536,
-        4096, 6144, 1792,
-        4096, 8192, 2048,
-        4096, 10240, 2304,
-        4096, 12288, 14336,
-        4096, 14336, 14336,
-        4096, 16384, 14336,
         14336, 128, 4096,
         14336, 512, 4096,
         14336, 1024, 4096,
         14336, 2048, 4096,
-        14336, 3072, 4096,
         14336, 4096, 4096,
         14336, 6144, 4096,
         14336, 8192, 4096,
@@ -7277,24 +7266,35 @@ static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
         14336, 12288, 4096,
         14336, 14336, 4096,
         14336, 16384, 4096,
+        4096, 128, 14336,
+        4096, 512, 14336,
+        4096, 1024, 14336,
+        4096, 2048, 14336,
+        4096, 4096, 14336,
+        4096, 6144, 14336,
+        4096, 8192, 14336,
+        4096, 10240, 14336,
+        4096, 12288, 14336,
+        4096, 14336, 14336,
+        4096, 16384, 14336,
     };
     // mnk, only test the cases we want to benchmark
     // tsong. Do note that z=xy^t. x=(m,k) is weight and y=(n,k) is input.
 
-    const size_t num_it = 72;
+    std::vector<size_t> vals(3*1*32);
+    for(size_t i = 0; i < 1; ++i) {
+    for(int k = 0; k < 32; k++) { 
+        int id = i*32+k;
+        vals[id*3] = 1024;
+        vals[id*3+1] = 1024;
+        vals[id*3+2] = (k+1)*512;
+    }
+}
+    const size_t num_it = 47;
     const size_t batch = 1;
     const int split_k = 1;
     const int shader_size = 1;
     // shader_size = 0, 1, 2 for S, M, L
-    std::vector<size_t> vals(3*20);
-
-    for(size_t mn = 2048; mn <= 8192; mn *= 2) {
-
-    for(int k = 0; k < 20; k++) {
-        vals[k*3] = mn;
-        vals[k*3+1] = mn;
-        vals[k*3+2] = (k+1)*512;
-    }
 
     for (size_t i = 0; i < vals.size(); i += 3) {
         // Set X_TYPE Y_TYPE to ggml_fp16_t for hmma test.
@@ -7303,9 +7303,8 @@ static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
         ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], batch, num_it, split_k, shader_size, GGML_TYPE_Q4_K);
         std::cerr << std::endl;
     }
-}
 
-    GGML_ABORT("End running test. Exit.");
+    return;
 #endif
 
     if (ctx->prealloc_x == nullptr || (ctx->prealloc_size_x > 0 && ctx->prealloc_x->size < ctx->prealloc_size_x)) {
@@ -8286,6 +8285,9 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
 
 #ifdef GGML_VULKAN_RUN_TESTS
     ggml_vk_preallocate_buffers(ctx);
+    ggml_vk_graph_cleanup(ctx);
+    printf("GGML_VULKAN_RUN_TESTS: Finished. Abort.\n");
+    return GGML_STATUS_ABORTED;
 #endif
 
     for (int i = 0; i < cgraph->n_nodes; i++) {
