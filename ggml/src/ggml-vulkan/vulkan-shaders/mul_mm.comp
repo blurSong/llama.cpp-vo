@@ -214,7 +214,7 @@ void main() {
 #ifdef F16VEC2_WAR
     ACC_TYPE sums[WMITER * TM/2 * WNITER * TN];
     ACC_TYPE cache_a[WMITER * TM/2];
-    FLOAT_TYPE cache_b[WNITER * TN/2];
+    FLOAT_TYPE cache_b[WNITER * TN];
     [[unroll]] for (uint i = 0; i < WMITER*TM*WNITER*TN/2; i++) {
         sums[i] = ACC_TYPE(0.0f, 0.0f);
     }
