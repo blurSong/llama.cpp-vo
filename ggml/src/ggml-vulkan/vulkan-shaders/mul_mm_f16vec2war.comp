@@ -86,6 +86,12 @@ layout (constant_id = 10) const uint WARP = 64; // 64 for AMD
 #define SHMEM_STRIDE (BK + 1)
 #endif
 
+#ifdef F16VEC2_WAR
+#define SHMEM_STRIDE_A (BK/2 + 1)
+#endif
+
+//#ifdef F16VEC2_WAR
+//shared ACC_TYPE buf_a[BM * SHMEM_STRIDE_A];
 shared FLOAT_TYPE buf_a[BM * SHMEM_STRIDE];
 shared FLOAT_TYPE buf_b[BN * SHMEM_STRIDE];
 
@@ -205,6 +211,14 @@ void main() {
         sums[i] = coopmat<ACC_TYPE, gl_ScopeSubgroup, TM, TN, gl_MatrixUseAccumulator>(0.0f);
     }
 #else
+#ifdef F16VEC2_WAR
+    ACC_TYPE sums[WMITER * TM/2 * WNITER * TN];
+    ACC_TYPE cache_a[WMITER * TM/2];
+    FLOAT_TYPE cache_b[WNITER * TN];
+    [[unroll]] for (uint i = 0; i < WMITER*TM*WNITER*TN/2; i++) {
+        sums[i] = ACC_TYPE(0.0f, 0.0f);
+    }
+#else
     ACC_TYPE sums[WMITER * TM * WNITER * TN];
     FLOAT_TYPE cache_a[WMITER * TM];
     FLOAT_TYPE cache_b[WNITER * TN];
@@ -213,8 +227,10 @@ void main() {
         sums[i] = ACC_TYPE(0.0f);
     }
 #endif
+#endif
 
     for (uint block = start_k; block < end_k; block += BK) {
+/*dummyload*/
         [[unroll]] for (uint l = 0; l < BM; l += loadstride_a) {
 
 #if defined(DATA_A_F32) || defined(DATA_A_F16)
@@ -356,7 +372,6 @@ void main() {
             buf_a[buf_idx + 1] = FLOAT_TYPE(dl * float(int8_t((data_a[ib].qs[qsi + 1] >> qsshift) & 3) - (((data_a[ib].hmask[hmi + 1] & m) != 0) ? 0 : 4)));
 #elif defined(DATA_A_Q4_K)
             const uint idx = pos_a + (loadc_a + l) * p.stride_a / LOAD_VEC_A + loadr_a;
-            const uint buf_idx = (loadc_a + l) * SHMEM_STRIDE + loadr_a * LOAD_VEC_A;
 
             const uint ib = idx / 128;                 // 2 values per idx
             const uint iqs = idx % 128;                // 0..127
@@ -384,7 +399,12 @@ void main() {
 
             const float d = loadd.x * sc;
             const float m = -loadd.y * mbyte;
-
+// #ifdef F16VEC2_WAR
+            // const uint buf_idx = (loadc_a + l) * SHMEM_STRIDE_A + loadr_a * LOAD_VEC_A / 2;
+            // FLOAT_TYPE tmpx = FLOAT_TYPE(fma(d, float((data_a[ib].qs[qsi    ] >> (b * 4)) & 0xF), m));
+            // FLOAT_TYPE tmpy = FLOAT_TYPE(fma(d, float((data_a[ib].qs[qsi + 1] >> (b * 4)) & 0xF), m));
+            // buf_a[buf_idx] = ACC_TYPE(tmpx, tmpy);
+            const uint buf_idx = (loadc_a + l) * SHMEM_STRIDE + loadr_a * LOAD_VEC_A;
             buf_a[buf_idx    ] = FLOAT_TYPE(fma(d, float((data_a[ib].qs[qsi    ] >> (b * 4)) & 0xF), m));
             buf_a[buf_idx + 1] = FLOAT_TYPE(fma(d, float((data_a[ib].qs[qsi + 1] >> (b * 4)) & 0xF), m));
 #elif defined(DATA_A_Q5_K)
@@ -684,10 +704,11 @@ void main() {
 #endif
         }
 
-        barrier();
+        barrier(); // end ldgsts loop K
 
         pos_a += BK / LOAD_VEC_A;
         pos_b += BK / LOAD_VEC_B;
+/*dummyload */
 
 #ifdef COOPMAT
         [[unroll]] for (uint i = 0; i < BK; i += TK) {
@@ -706,31 +727,54 @@ void main() {
         [[unroll]] for (uint i = 0; i < BK; i++) {
             // Load from shared into cache
             [[unroll]] for (uint wsir = 0; wsir < WMITER; wsir++) {
+#ifdef F16VEC2_WAR
+                // to maitan correctness, needs to build f16v2 data here.
+                [[unroll]] for (uint j = 0; j < TM/2; j++) {
+                    // cache_a[wsir * TM/2 + j] = buf_a[(warp_r * WM + wsir * WSUBM + tiwr * TM/2 + j) * SHMEM_STRIDE_A + i];
+                    FLOAT_TYPE tmpa0 = buf_a[(warp_r * WM + wsir * WSUBM + tiwr * TM + j*2) * SHMEM_STRIDE + i];
+                    FLOAT_TYPE tmpa1 = buf_a[(warp_r * WM + wsir * WSUBM + tiwr * TM + j*2+1) * SHMEM_STRIDE + i];
+                    cache_a[wsir * TM/2 + j] = ACC_TYPE(tmpa0, tmpa1);
+#else
                 [[unroll]] for (uint j = 0; j < TM; j++) {
                     cache_a[wsir * TM + j] = buf_a[(warp_r * WM + wsir * WSUBM + tiwr * TM + j) * SHMEM_STRIDE + i];
+#endif
                 }
             }
+
             [[unroll]] for (uint wsic = 0; wsic < WNITER; wsic++) {
                 [[unroll]] for (uint j = 0; j < TN; j++) {
+// #ifdef F16VEC2_WAR
+                // cache_b[wsic * TN + j] = ACC_TYPE(buf_b[(warp_c * WN + wsic * WSUBN + tiwc * TN + j) * SHMEM_STRIDE + i],
+                //                                   buf_b[(warp_c * WN + wsic * WSUBN + tiwc * TN + j) * SHMEM_STRIDE + i]);
                     cache_b[wsic * TN + j] = buf_b[(warp_c * WN + wsic * WSUBN + tiwc * TN + j) * SHMEM_STRIDE + i];
                 }
             }
 
+#ifdef F16VEC2_WAR
+            [[unroll]] for (uint wsic = 0; wsic < WNITER; wsic++) {
+                [[unroll]] for (uint cc = 0; cc < TN; cc++) {
+                    ACC_TYPE b_vec = ACC_TYPE(cache_b[wsic * TN + cc], cache_b[wsic * TN + cc]);
+                    [[unroll]] for (uint wsir = 0; wsir < WMITER; wsir++) {
+                            [[unroll]] for (uint cr = 0; cr < TM/2; cr++) {
+                                const uint sums_idx = (wsic * TN + cc) * (WMITER * TM/2) + wsir * TM/2 + cr;
+                                const uint a_idx = wsir * TM/2 + cr;
+                                sums[sums_idx] = fma(cache_a[a_idx], b_vec, sums[sums_idx]);
+#else
             [[unroll]] for (uint wsic = 0; wsic < WNITER; wsic++) {
                 [[unroll]] for (uint wsir = 0; wsir < WMITER; wsir++) {
                     [[unroll]] for (uint cc = 0; cc < TN; cc++) {
                         [[unroll]] for (uint cr = 0; cr < TM; cr++) {
                             const uint sums_idx = (wsic * TN + cc) * (WMITER * TM) + wsir * TM + cr;
                             sums[sums_idx] = fma(ACC_TYPE(cache_a[wsir * TM + cr]), ACC_TYPE(cache_b[wsic * TN + cc]), sums[sums_idx]);
+#endif
                         }
                     }
                 }
             }
-        }
+        } // loop k
 #endif
-
         barrier();
-    }
+    } // end loop K
 
     const uint dr = ir * BM + warp_r * WM;
     const uint dc = ic * BN + warp_c * WN;
@@ -799,6 +843,16 @@ void main() {
 
                 const u16vec2 row_idx = row_ids[row_i];
 #endif // MUL_MAT_ID
+#ifdef F16VEC2_WAR
+                [[unroll]] for (uint cr = 0; cr < TM; cr+=2) {
+                    if (dr_warp + cr < p.M && dc_warp + cc < p.N) {
+                        data_d[offsets + (dc_warp + cc) * p.stride_d + dr_warp + cr] = D_TYPE(sums[(wsic * TN + cc) * (WMITER * TM/2) + wsir * TM/2 + cr/2].x);
+                    }
+                    if (dr_warp + cr + 1 < p.M && dc_warp + cc < p.N) {
+                        data_d[offsets + (dc_warp + cc) * p.stride_d + dr_warp + cr + 1] = D_TYPE(sums[(wsic * TN + cc) * (WMITER * TM/2) + wsir * TM/2 + cr/2].y); // fixed. 03/20
+                    }
+                }
+#else
                 [[unroll]] for (uint cr = 0; cr < TM; cr++) {
 #ifdef MUL_MAT_ID
                     data_d[row_idx.y * p.batch_stride_d + row_idx.x * p.stride_d + dr_warp + cr] = D_TYPE(sums[(wsic * TN + cc) * (WMITER * TM) + wsir * TM + cr]);
@@ -808,8 +862,9 @@ void main() {
                     }
 #endif // MUL_MAT_ID
                 }
+#endif // F16VEC2_WAR
             }
         }
-    }
+    }  // end loop wsic
 #endif // COOPMAT
 }
