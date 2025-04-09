@@ -24,7 +24,7 @@ cmake --build build --config Release
 # Do note that z=xy^t. x=(m,k) is weight and y=(n,k) is input
 cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_RUN_TESTS=ON
 cmake --build build --config Release
-.\llama-bench -p 100 -n 0 -r 1 --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_gemm_ffn_f16war.log
+.\llama-bench -p 100 -n 0 -r 1 --skip-warmup -m $MODEL_DIR *> $LOG_DIR\vulkan_gemm_fmatest_f16war_dumcomploop.log
 
 # 4. Profile
 cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_PERF=ON

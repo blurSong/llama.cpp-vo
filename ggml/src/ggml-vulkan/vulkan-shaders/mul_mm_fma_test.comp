@@ -89,6 +89,7 @@ layout (constant_id = 10) const uint WARP = 64; // 64 for AMD
 #ifdef F16VEC2_WAR
 #define SHMEM_STRIDE_A (BK/2 + 1)
 #endif
+#define DUMMYFMALOOPBKSCALE 32
 
 #ifdef F16VEC2_WAR
 shared ACC_TYPE buf_a[BM/2 * SHMEM_STRIDE];
@@ -236,9 +237,10 @@ void main() {
     for (uint block = start_k; block < end_k; block += BK) {
 
 #ifdef COOPMAT
+// pass
 #else
-
-        [[unroll]] for (uint i = 0; i < BK; i++) {
+        // loop ldsmem only once
+        [[unroll]] for (uint i = 0; i < BK/32; i++) {
             // Load from shared into cache
             [[unroll]] for (uint wsir = 0; wsir < WMITER; wsir++) {
 #ifdef F16VEC2_WAR
@@ -258,6 +260,7 @@ void main() {
                 }
              }
 
+        [[unroll]] for (uint dfl = 0; dfl < DUMMYFMALOOPBKSCALE*BK; dfl++) {
 #ifdef F16VEC2_WAR
             [[unroll]] for (uint wsic = 0; wsic < WNITER; wsic++) {
                     [[unroll]] for (uint cc = 0; cc < TN; cc++) {
@@ -284,6 +287,7 @@ void main() {
                     }
                 }
             }
+        } // for outermost DUMMYFMALOOP
         } // loop k
 #endif
         barrier();

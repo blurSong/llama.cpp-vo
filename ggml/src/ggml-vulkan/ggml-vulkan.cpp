@@ -7281,12 +7281,12 @@ static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
     // mnk, only test the cases we want to benchmark
     // tsong. Do note that z=xy^t. x=(m,k) is weight and y=(n,k) is input.
 
-    std::vector<size_t> vals(3*1*32);
-    for(size_t i = 0; i < 1; ++i) {
+    std::vector<size_t> vals(3*2*32);
+    for(size_t i = 0; i < 2; ++i) {
     for(int k = 0; k < 32; k++) {
         int id = i*32+k;
-        vals[id*3] = 1024;
-        vals[id*3+1] = 1024;
+        vals[id*3] = 512*(i+1);
+        vals[id*3+1] = 512*(i+1);
         vals[id*3+2] = (k+1)*512;
     }
 }
@@ -7296,11 +7296,11 @@ static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx) {
     const int shader_size = 1;
     // shader_size = 0, 1, 2 for S, M, L
 
-    for (size_t i = 0; i < vals0.size(); i += 3) {
+    for (size_t i = 0; i < vals.size(); i += 3) {
         // Set X_TYPE Y_TYPE to ggml_fp16_t for hmma test.
         // ggml_vk_test_matmul<ggml_fp16_t, ggml_fp16_t>(ctx, vals[i], vals[i + 1], vals[i + 2], batch, num_it, split_k, shader_size);
         // Set GGML_TYPE_Q4_K for q4k test.
-        ggml_vk_test_dequant_matmul(ctx, vals0[i], vals0[i + 1], vals0[i + 2], batch, num_it, split_k, shader_size, GGML_TYPE_Q4_K);
+        ggml_vk_test_dequant_matmul(ctx, vals[i], vals[i + 1], vals[i + 2], batch, num_it, split_k, shader_size, GGML_TYPE_Q4_K);
         std::cerr << std::endl;
     }
 

@@ -338,12 +338,12 @@ void matmul_shaders(bool fp16, bool matmul_id, bool coopmat, bool coopmat2, bool
             // use f16vec2 for buffer and registers and packed fp16 math
             if (tname == "q4_k" && !matmul_id && f16acc) {
                 auto base_dict_f16acc = base_dict;
-                // uncomment this for testing fma ops
+                // uncomment this for testing fma tops
                 //std::string source_name = "mul_mm_fma_test.comp";
                 // uncomment these for f16vec2 war
-                base_dict_f16acc["ACC_TYPE"] = "f16vec2";
-                base_dict_f16acc["FLOAT_TYPE"] = "float16_t";
-                base_dict_f16acc["F16VEC2_WAR"] = "1";
+                //base_dict_f16acc["ACC_TYPE"] = "f16vec2";
+                //base_dict_f16acc["FLOAT_TYPE"] = "float16_t";
+                //base_dict_f16acc["F16VEC2_WAR"] = "1";
                 string_to_spv(shader_name + "_" + tname + "_f32_aligned", source_name, merge_maps(base_dict_f16acc, {{data_a_key, "1"}, {"LOAD_VEC_A", load_vec_a}, {"LOAD_VEC_B", load_vec}, {"B_TYPE", aligned_b_type_f32}, {"D_TYPE", "float"}, {"B_IS_FLOAT", "1"}, {"ALIGNED", "1"}}), fp16, coopmat, coopmat2, f16acc);
             }
             else
