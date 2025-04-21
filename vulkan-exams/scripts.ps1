@@ -1,16 +1,15 @@
 # Build Env is MSYS2 UCRT64
 # Use modified llama-bench.cpp and ggml-vulkan.cpp
-# For igpu, setup device = 1
-$Env:GGML_VK_VISIBLE_DEVICES="1"
+# For igpu, setup device = 0
+$Env:GGML_VK_VISIBLE_DEVICES="0"
 $LOG_DIR="C:\SRC\llama.cpp\vulkan-exams\logs"
-$MODEL_DIR="C:\SRC\llmodel\Meta-Llama-3.1-8B-Instruct.Q4_K_M.gguf"
-
+$MODEL_DIR="C:\SRC\llmodel\Mistral-7B-Instruct-v0.3-Q4_K_M.gguf"
 Set-Location .\llama.cpp\build\bin
 
 # 1. E2E Benchmark
 cmake -B build -DGGML_VULKAN=ON
 cmake --build build --config Release
-.\llama-bench -p 0 -n 0 -r 10 -pg 128,128 -pg 128,2048 -pg 2048,128 -pg 2048,2048 -m $MODEL_DIR *>> $LOG_DIR\vulkan_e2e_perf_01.log
+.\llama-bench -p 0 -n 0 -r 10 -pg 128,128 -m $MODEL_DIR *>> $LOG_DIR\vulkan_e2e_perf_01.log
 
 # 2. Get the vulkan debug log
 cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_DEBUG=ON

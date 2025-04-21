@@ -316,7 +316,7 @@ void matmul_shaders(bool fp16, bool matmul_id, bool coopmat, bool coopmat2, bool
         base_dict["COOPMAT"] = "1";
     }
 
-    const std::string source_name = coopmat2 ? "mul_mm_cm2.comp" : "mul_mm.comp";
+    const std::string source_name = coopmat2 ? "mul_mm_cm2.comp" : "mul_mm.comp"; // tsong. mul_mm_f16vec2war.comp
 
     // Shaders with f16 B_TYPE
     string_to_spv(shader_name + "_f32_f16", source_name, merge_maps(base_dict, {{"DATA_A_F32", "1"}, {"B_TYPE", "float16_t"}, {"D_TYPE", "float"}, }), fp16, coopmat, coopmat2, f16acc);
