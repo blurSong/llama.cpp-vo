@@ -1,15 +1,19 @@
-# Build Env is MSYS2 UCRT64
-# Use modified llama-bench.cpp and ggml-vulkan.cpp
-# For igpu, setup device = 0
+##  Build in MSYS2 UCRT64
+##  Use modified llama-bench.cpp and ggml-vulkan.cpp For igpu, setup device = 0
+##  ---------------------------------------------------------------------------
+# DeepSeek-R1-Distill-Llama-8B-Q4_K_M
+# qwen\qwen2.5-7b-instruct-q4_k_m-00001-of-00002
+
 $Env:GGML_VK_VISIBLE_DEVICES="0"
 $LOG_DIR="C:\SRC\llama.cpp\vulkan-exams\logs"
-$MODEL_DIR="C:\SRC\llmodel\gguf\DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf"
-Set-Location C:\SRC\llama.cpp\build\bin
+$MODEL_DIR="C:\SRC\llmodel\gguf\qwen\qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf"
 
 # 1. E2E Benchmark
 cmake -B build -DGGML_VULKAN=ON
 cmake --build build --config Release
 .\llama-bench -p 0 -n 0 -r 10 -pg 128,128 -pg 512,128 -pg 1024,128 -pg 2048,128 -m $MODEL_DIR
+.\llama-bench -m $MODEL_DIR -p 0 -n 0 -r 10 -ngl 999 -pg 21,512 # -fa 1
+
 
 # 2. Get the vulkan debug log
 cmake -B build -DGGML_VULKAN=ON -DGGML_VULKAN_DEBUG=ON
