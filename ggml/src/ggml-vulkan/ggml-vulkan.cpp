@@ -8502,7 +8502,7 @@ static bool ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_tensor *
 
 #ifdef GGML_VULKAN_PERF
         // tsong. add device, node and node idx for profling
-        use_fence = true; // fence anyway to get time
+        use_fence = true; // fence anyway to get perlayer time
 
         auto begin = std::chrono::high_resolution_clock::now();
 
@@ -9015,9 +9015,11 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
 
     // Submit work every nodes_per_submit nodes to overlap CPU cmdbuffer generation with GPU execution.
     // Start with a smaller count to get work submitted right away, and increase it after each submit.
+    // (and scaled down based on model size, so smaller models submit earlier).
+    // Also submit at least every 100 nodes, in case there are workloads without as much matmul.
+
     // tsong. Hack this hardcoding for performance benchmarking
-    // defualt 100, 0 for per-node sumbission profling test.
-    int nodes_per_submit = 100;
+    int nodes_per_submit = 0; // set 0 for per-node sumbission profling test.
     int submitted_nodes = 0;
     int submit_count = 0;
     uint64_t mul_mat_bytes = 0;
